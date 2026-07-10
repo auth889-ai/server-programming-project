@@ -4,13 +4,6 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Dict, List
-import redis
-redis_client = redis.Redis(
-    host="redis",
-    port=6379,
-    db=0,
-    decode_responses=True
-)
 
 class GlobalWorkoutNotifier:
     def __init__(self):
