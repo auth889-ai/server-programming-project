@@ -1,65 +1,19 @@
-# import os
-# from datetime import datetime, timedelta, timezone
-# from typing import Optional
-
-# from jose import jwt
-# from fastapi.security import HTTPBearer
-# from argon2 import PasswordHasher
-# from argon2.exceptions import VerifyMismatchError, VerificationError
-
-# # Configurable via env
-# SECRET_KEY = os.environ.get("SECRET_KEY", "change_this_secret_for_prod")
-# ALGORITHM = os.environ.get("ALGORITHM", "HS256")
-# ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-
-# password_hasher = PasswordHasher()
-# security = HTTPBearer()
-
-
-# def hash_password(password: str) -> str:
-#     return password_hasher.hash(password)
-
-
-# def verify_password(plain_password: str, hashed_password: str) -> bool:
-#     try:
-#         return password_hasher.verify(hashed_password, plain_password)
-#     except (VerifyMismatchError, VerificationError):
-#         return False
-
-
-# def create_access_token(data: dict, expires_minutes: Optional[int] = None) -> str:
-#     to_encode = data.copy()
-#     expire = datetime.now(timezone.utc) + timedelta(minutes=(expires_minutes or ACCESS_TOKEN_EXPIRE_MINUTES))
-#     to_encode.update({"exp": expire})
-#     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-#     return encoded_jwt
-
-
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlmodel import Session, select
 from jose import jwt, JWTError
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError
-import httpx
-from fastapi import HTTPException, status
-from models import User, engine
-security = HTTPBearer()
-
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-# FIXED IMPORTS
-from models import User, engine
-
-def get_session():
-    with Session(engine) as session:
-        yield session
-
-# Load environment variables
 from dotenv import load_dotenv
+
+from models import User, engine
+
+# Load environment variables before reading any config
 load_dotenv()
 
 # Configurable via env
@@ -67,7 +21,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "change_this_secret_for_prod")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
-# Google OAuth config - FIXED REDIRECT URI
+# Google OAuth config
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 # MUST MATCH Google Console AND api/auth.py
@@ -76,14 +30,22 @@ GOOGLE_REDIRECT_URI = "http://localhost:8000/api/auth/google/callback"
 password_hasher = PasswordHasher()
 security = HTTPBearer()
 
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+
 def hash_password(password: str) -> str:
     return password_hasher.hash(password)
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return password_hasher.verify(hashed_password, plain_password)
     except (VerifyMismatchError, VerificationError):
         return False
+
 
 def create_access_token(data: dict, expires_minutes: Optional[int] = None) -> str:
     to_encode = data.copy()
@@ -93,6 +55,7 @@ def create_access_token(data: dict, expires_minutes: Optional[int] = None) -> st
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
 
 async def validate_google_token(code: str) -> str:
     """
@@ -142,9 +105,6 @@ async def validate_google_token(code: str) -> str:
         )
 
     return email
-def get_session():
-    with Session(engine) as session:
-        yield session
 
 
 def get_current_user(
@@ -175,4 +135,3 @@ def get_current_user(
         )
 
     return user
-    
