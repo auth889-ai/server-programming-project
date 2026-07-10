@@ -35,6 +35,11 @@ app = FastAPI(
 # Add all middleware (CORS + ResponseTime)
 add_all_middleware(app)
 
+@app.get("/health", tags=["health"])
+def health_check():
+    """Simple liveness probe for Docker/nginx health checks."""
+    return {"status": "ok"}
+
 # Mount routers under /api/*
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(users_router, prefix="/api/users")
