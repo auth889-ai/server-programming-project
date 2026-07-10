@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 
 from models import User, Follow, engine
 from api.schemas import UserPublic, UserCreate
-from core.auth import get_current_user
+from core.auth import get_current_user, hash_password
 
 router = APIRouter(tags=["users"])
 
@@ -30,7 +30,7 @@ def create_user(user: UserCreate, session: Session = Depends(get_session)):
     new_user = User(
         email=user.email,
         username=username,
-        password_hash=user.password
+        password_hash=hash_password(user.password)
     )
 
     session.add(new_user)
