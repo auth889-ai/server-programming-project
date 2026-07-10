@@ -8,11 +8,12 @@ from sqlalchemy import Column, DateTime
 
 # Database Setup (Moved here to avoid circular imports)
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://swe_user:swe_pass@db:5432/swe_db")
-engine = create_engine(DATABASE_URL, echo=True)
+# Set SQL_ECHO=true to log every SQL statement (useful for debugging)
+SQL_ECHO = os.environ.get("SQL_ECHO", "false").lower() == "true"
+engine = create_engine(DATABASE_URL, echo=SQL_ECHO)
 
 
-# -----------------------curl -i http://localhost:8000/api/users
-
+# -----------------------
 # User Model
 # -----------------------
 class User(SQLModel, table=True):
