@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Shop Google Login Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
+        #results { margin-top: 20px; padding: 10px; background-color: #f4f4f4; border: 1px dashed #aaa; word-wrap: break-word; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>E-Shop: Lab 3 Google OAuth Test</h1>
+        <p>This page simulates your frontend store initiating the "Login with Google" process.</p>
+        
+        <button id="loginButton" style="padding: 10px 20px; font-size: 16px; background-color: #4285F4; color: white; border: none; cursor: pointer;">
+            Login with Google
+        </button>
+
+        <div id="results" class="hidden">
+            <h3>API Response (JWT)</h3>
+            <pre id="jwtDisplay"></pre>
+        </div>
+
+        <p style="margin-top: 20px;">
+            **NOTE:** After clicking the button, you will be redirected to Google. Upon success, Google redirects you back to the API. If the API successfully returns a JWT, you will need to check your browser's **Network tab** to copy the token.
+        </p>
+    </div>
+
+    <script>
+        document.getElementById('loginButton').onclick = function() {
+            // **IMPORTANT:** Students MUST replace the placeholder with YOUR actual GOOGLE_CLIENT_ID
+            const CLIENT_ID = "525329743938-5o4jbvupqp6b9bej1kspn36feccd6bp8.apps.googleusercontent.com"; 
+            const REDIRECT_URI = "http://localhost:8000/auth/google/callback";
+            const SCOPES = "email profile openid";
+
+            const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${CLIENT_ID}` +
+                `&redirect_uri=${REDIRECT_URI}` +
+                `&scope=${encodeURIComponent(SCOPES)}` +
+                `&response_type=code` +
+                `&access_type=offline`;
+            window.location.href = googleAuthUrl;
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('access_token');
+            
+            if (token) {
+                document.getElementById('jwtDisplay').textContent = token;
+                document.getElementById('results').classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test</title>
+</head>
+<body>
+    <h1>CORS Test: Check your browser's Console and Network tab!</h1>
+    <script>
+        const api_url = 'http://localhost:8000/posts'; 
+
+        fetch(api_url)
+            .then(response => {
+    
+                if (response.ok) {
+                    console.log('✅ CORS Success: Request succeeded, status:', response.status);
+                    return response.json();
+                } else {
+                    console.error('❌ Request failed with status:', response.status);
+                }
+            })
+            .then(data => {
+                console.log('Data received:', data);
+            })
+            .catch(error => {
+                console.error('⚠️ Fetch Error:', error);
+            });
+    </script>
+</body>
+</html>

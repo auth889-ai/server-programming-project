@@ -1,0 +1,11 @@
+fastapi
+fastapi[standard]
+sqlmodel
+psycopg2-binary
+argon2-cffi
+python-jose[cryptography]
+fastapi-cors
+fastapi-cors
+httpx
+starlette
+redis

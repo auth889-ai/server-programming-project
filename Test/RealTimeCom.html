@@ -1,0 +1,864 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout App Real-Time Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; }
+        .box { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+        h3 { margin-top: 0; color: #1c1e21; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .log { background: #1e1e1e; color: #00ff00; height: 200px; overflow-y: auto; font-family: monospace; font-size: 13px; padding: 10px; border-radius: 6px; margin-top: 10px; }
+        .workout-item { background: #f9f9f9; border-left: 4px solid #28a745; padding: 8px; margin-bottom: 8px; color: #333; }
+        input, button { padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 6px; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        .toast-area { grid-column: span 2; background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 8px; color: #155724; font-weight: bold; text-align: center; display: none; margin-bottom: 20px;}
+        .auth-section { grid-column: span 2; background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .token-display { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; word-break: break-all; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-section">
+        <h3>🔑 Authentication (Get Token First)</h3>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <input type="email" id="loginEmail" placeholder="Email" style="flex: 1;">
+            <input type="password" id="loginPassword" placeholder="Password" style="flex: 1;">
+            <button onclick="login()">Login</button>
+            <button onclick="register()" style="background-color: #28a745;">Register</button>
+        </div>
+        <div id="tokenDisplay" class="token-display">No token yet. Login or register first.</div>
+    </div>
+
+    <div id="toast" class="toast-area"></div>
+
+    <div class="box">
+        <h3>Task 1: Feed Check (Short Polling - Every 10s)</h3>
+        <p>Checks for new workouts every 10 seconds.</p>
+        <p>Status: <strong id="pollStatus">Not polling</strong></p>
+        <p>Last Check: <span id="lastCheck">Never</span></p>
+        <p>Has New Workouts: <strong id="hasNew" style="color: #dc3545;">No</strong></p>
+        <p>Total Workouts: <span id="totalWorkouts">0</span></p>
+        <button onclick="startPolling()">Start Polling</button>
+        <button onclick="stopPolling()" style="background-color: #dc3545;">Stop Polling</button>
+        <div id="pollLog" class="log"></div>
+    </div>
+
+    <div class="box">
+        <h3>Task 2: Global Hype Feed (SSE)</h3>
+        <p>Real-time workout notifications via Server-Sent Events</p>
+        <p>Status: <strong id="sseStatus">Disconnected</strong></p>
+        <button onclick="connectSSE()">Connect to SSE</button>
+        <button onclick="disconnectSSE()" style="background-color: #dc3545;">Disconnect</button>
+        <div id="sseLog" class="log"></div>
+    </div>
+
+    <div class="box" style="grid-column: span 2;">
+        <h3>Create New Workout (Triggers SSE Notifications)</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+            <input type="text" id="workoutTitle" placeholder="Title (e.g., Morning Run)">
+            <input type="text" id="workoutDesc" placeholder="Description">
+            <input type="number" id="workoutDistance" placeholder="Distance (km)" step="0.1">
+        </div>
+        <button onclick="createWorkout()" style="background-color: #28a745; margin-top: 10px;">Create Workout</button>
+        <div id="createLog" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; min-height: 20px;"></div>
+    </div>
+
+    <script>
+        let authToken = null;
+        let pollingInterval = null;
+        let sseConnection = null;
+
+        // --- Authentication ---
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!email || !password) {
+                alert('Please enter email and password');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.access_token;
+                    document.getElementById('tokenDisplay').innerHTML = 
+                        `<strong>Token:</strong> ${authToken.substring(0, 50)}...`;
+                    showToast('✅ Login successful! Token saved.');
+                } else {
+                    const error = await response.json();
+                    showToast(`❌ Login failed: ${error.detail}`, true);
+                }
+            } catch (error) {
+                showToast('❌ Connection error. Is server running?', true);
+            }
+        }
+
+        async function register() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!email || !password) {
+                alert('Please enter email and password');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showToast(`✅ Registered successfully! Username: ${data.username}`);
+                    // Auto-login after registration
+                    setTimeout(login, 1000);
+                } else {
+                    const error = await response.json();
+                    showToast(`❌ Registration failed: ${error.detail}`, true);
+                }
+            } catch (error) {
+                showToast('❌ Connection error. Is server running?', true);
+            }
+        }
+
+        // --- Task 1: Short Polling ---
+        async function checkFeed() {
+            if (!authToken) {
+                showToast('❌ Please login first!', true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/feed/check-new', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Update UI
+                    document.getElementById('lastCheck').textContent = new Date().toLocaleTimeString();
+                    document.getElementById('hasNew').textContent = data.has_new_workouts ? 'YES!' : 'No';
+                    document.getElementById('hasNew').style.color = data.has_new_workouts ? '#28a745' : '#dc3545';
+                    document.getElementById('totalWorkouts').textContent = data.total_workouts;
+                    
+                    // Log
+                    const log = document.getElementById('pollLog');
+                    const status = data.has_new_workouts ? '🆕 NEW WORKOUTS!' : 'No new workouts';
+                    log.innerHTML = `<div>[${new Date().toLocaleTimeString()}] ${status} (Total: ${data.total_workouts})</div>` + log.innerHTML;
+                    
+                    // Show toast if new workouts
+                    if (data.has_new_workouts) {
+                        showToast(`🎉 ${data.total_workouts} new workouts available!`);
+                    }
+                    
+                } else {
+                    const log = document.getElementById('pollLog');
+                    log.innerHTML = `<div style="color:red">[${new Date().toLocaleTimeString()}] Polling failed (check token)</div>` + log.innerHTML;
+                }
+            } catch (error) {
+                const log = document.getElementById('pollLog');
+                log.innerHTML = `<div style="color:red">[${new Date().toLocaleTimeString()}] Polling error: ${error.message}</div>` + log.innerHTML;
+            }
+        }
+
+        function startPolling() {
+            if (!authToken) {
+                showToast('❌ Please login first!', true);
+                return;
+            }
+            
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+            
+            // Initial check
+            checkFeed();
+            
+            // Poll every 10 seconds as per requirements
+            pollingInterval = setInterval(checkFeed, 10000);
+            document.getElementById('pollStatus').textContent = 'Polling every 10s';
+            document.getElementById('pollStatus').style.color = '#28a745';
+            
+            showToast('🔍 Started polling every 10 seconds');
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                document.getElementById('pollStatus').textContent = 'Stopped';
+                document.getElementById('pollStatus').style.color = '#dc3545';
+                showToast('⏹️ Stopped polling');
+            }
+        }
+
+        // --- Task 2: SSE ---
+        function connectSSE() {
+            if (!authToken) {
+                showToast('❌ Please login first!', true);
+                return;
+            }
+
+            if (sseConnection) {
+                disconnectSSE();
+            }
+
+            // Connect to SSE endpoint
+            sseConnection = new EventSource('http://localhost:8000/api/feed/stream/global-hype');
+            
+            document.getElementById('sseStatus').textContent = 'Connected';
+            document.getElementById('sseStatus').style.color = '#28a745';
+            
+            sseConnection.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    const log = document.getElementById('sseLog');
+                    
+                    if (data.type === 'workout') {
+                        log.innerHTML = `<div>[${new Date().toLocaleTimeString()}] ${data.message}</div>` + log.innerHTML;
+                        
+                        // Show toast notification
+                        showToast(`🏃‍♂️ ${data.message}`);
+                    }
+                } catch (error) {
+                    console.log('Heartbeat or other SSE message:', event.data);
+                }
+            };
+
+            sseConnection.onerror = (error) => {
+                document.getElementById('sseStatus').textContent = 'Error - Reconnecting...';
+                document.getElementById('sseStatus').style.color = '#dc3545';
+                
+                const log = document.getElementById('sseLog');
+                log.innerHTML = `<div style="color:red">[${new Date().toLocaleTimeString()}] SSE Error, will reconnect automatically</div>` + log.innerHTML;
+            };
+
+            sseConnection.onopen = () => {
+                const log = document.getElementById('sseLog');
+                log.innerHTML = `<div style="color:blue">[${new Date().toLocaleTimeString()}] Connected to SSE stream</div>` + log.innerHTML;
+            };
+
+            showToast('📡 Connected to real-time workout notifications');
+        }
+
+        function disconnectSSE() {
+            if (sseConnection) {
+                sseConnection.close();
+                sseConnection = null;
+                document.getElementById('sseStatus').textContent = 'Disconnected';
+                document.getElementById('sseStatus').style.color = '#6c757d';
+                showToast('🔌 Disconnected from SSE');
+            }
+        }
+
+        // --- Create Workout (Triggers SSE) ---
+        async function createWorkout() {
+            if (!authToken) {
+                showToast('❌ Please login first!', true);
+                return;
+            }
+
+            const title = document.getElementById('workoutTitle').value;
+            const description = document.getElementById('workoutDesc').value;
+            const distance = parseFloat(document.getElementById('workoutDistance').value);
+
+            if (!title || !description || !distance) {
+                showToast('❌ Please fill all fields', true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/workouts/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        title,
+                        description,
+                        distance_km: distance
+                    })
+                });
+
+                const log = document.getElementById('createLog');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log.innerHTML = `<div style="color:green">✅ Workout created: ${data.title} (${data.distance_km}km)</div>`;
+                    
+                    // Clear form
+                    document.getElementById('workoutTitle').value = '';
+                    document.getElementById('workoutDesc').value = '';
+                    document.getElementById('workoutDistance').value = '';
+                    
+                    showToast(`✅ Created: ${title} - ${distance}km`);
+                    
+                } else {
+                    const error = await response.json();
+                    log.innerHTML = `<div style="color:red">❌ Failed: ${error.detail}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('createLog').innerHTML = 
+                    `<div style="color:red">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        // --- Utility Functions ---
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            toast.style.background = isError ? '#f8d7da' : '#d4edda';
+            toast.style.borderColor = isError ? '#f5c6cb' : '#c3e6cb';
+            toast.style.color = isError ? '#721c24' : '#155724';
+            
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 5000);
+        }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (pollingInterval) clearInterval(pollingInterval);
+            if (sseConnection) sseConnection.close();
+        });
+    </script>
+</body>
+</html>
+
+
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout App Real-Time Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; }
+        .box { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+        h3 { margin-top: 0; color: #1c1e21; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .log { background: #1e1e1e; color: #00ff00; height: 200px; overflow-y: auto; font-family: monospace; font-size: 13px; padding: 10px; border-radius: 6px; margin-top: 10px; }
+        .workout-item { background: #f9f9f9; border-left: 4px solid #28a745; padding: 8px; margin-bottom: 8px; color: #333; }
+        input, button { padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 6px; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        .toast-area { grid-column: span 2; background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 8px; color: #155724; font-weight: bold; text-align: center; display: none; margin-bottom: 20px;}
+        .auth-section { grid-column: span 2; background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .token-display { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; word-break: break-all; }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-section">
+        <h3>🔑 Authentication (Get Token First)</h3>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <input type="email" id="loginEmail" placeholder="Email" style="flex: 1;" value="test@example.com">
+            <input type="password" id="loginPassword" placeholder="Password" style="flex: 1;" value="password">
+            <button onclick="login()">Login</button>
+            <button onclick="register()" style="background-color: #28a745;">Register</button>
+        </div>
+        <div id="tokenDisplay" class="token-display">No token yet. Login or register first.</div>
+    </div>
+
+    <div id="toast" class="toast-area"></div>
+
+    <div class="box">
+        <h3>Task 1: Feed Check (Short Polling - Every 10s)</h3>
+        <p>Checks for new workouts every 10 seconds.</p>
+        <p>Status: <strong id="pollStatus">Not polling</strong></p>
+        <p>Last Check: <span id="lastCheck">Never</span></p>
+        <p>Has New Workouts: <strong id="hasNew" style="color: #dc3545;">No</strong></p>
+        <p>Total Workouts: <span id="totalWorkouts">0</span></p>
+        <button onclick="startPolling()">Start Polling</button>
+        <button onclick="stopPolling()" style="background-color: #dc3545;">Stop Polling</button>
+        <div id="pollLog" class="log"></div>
+    </div>
+
+    <div class="box">
+        <h3>Task 2: Global Hype Feed (SSE)</h3>
+        <p>Real-time workout notifications via Server-Sent Events</p>
+        <p>Status: <strong id="sseStatus">Disconnected</strong></p>
+        <button onclick="connectSSE()">Connect to SSE</button>
+        <button onclick="disconnectSSE()" style="background-color: #dc3545;">Disconnect</button>
+        <div id="sseLog" class="log"></div>
+    </div>
+  <div class="box" style="grid-column: span 2;">
+    <h3>Task 3 & 4: WebSocket Personalized Feed (ws://.../ws/feed?token=JWT)</h3>
+
+    <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+        <input type="text" id="wsTokenInput" placeholder="JWT Token" style="flex:1;">
+        <button onclick="connectWebSocket()">Connect</button>
+        <input type="number" id="clapTargetId" placeholder="User ID" style="width:100px;">
+        <button onclick="sendClap()" style="background-color:orange;">👏 Send Clap</button>
+    </div>
+
+    <div id="tokenVerifyBox" style="margin-bottom:10px; padding:10px; background:#f8f9fa; border-radius:6px; font-family:monospace; font-size:13px; display:none;">
+        <div id="tokenVerifyContent"></div>
+    </div>
+
+    <div id="wsFeed" style="margin-top:10px;"></div>
+    <div id="clapLog" class="log"></div>
+</div>
+
+    <div class="box" style="grid-column: span 2;">
+        <h3>Create New Workout (Triggers SSE Notifications)</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+            <input type="text" id="workoutTitle" placeholder="Title (e.g., Morning Run)" value="Morning Run">
+            <input type="text" id="workoutDesc" placeholder="Description" value="Beautiful sunrise run">
+            <input type="number" id="workoutDistance" placeholder="Distance (km)" step="0.1" value="5.5">
+        </div>
+        <button onclick="createWorkout()" style="background-color: #28a745; margin-top: 10px;">Create Workout</button>
+        <div id="createLog" style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 5px; min-height: 20px;"></div>
+    </div>
+
+    <script>
+        let authToken = null;
+        let pollingInterval = null;
+        let sseConnection = null;
+        let lastCheckTime = null;
+
+        // --- Authentication ---
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!email || !password) {
+                showToast('Please enter email and password', true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.access_token;
+                    document.getElementById('tokenDisplay').innerHTML = 
+                        `<strong>Token:</strong> ${authToken.substring(0, 50)}...`;
+                    showToast('✅ Login successful! Token saved.', false);
+                } else {
+                    const error = await response.json();
+                    showToast(`❌ Login failed: ${error.detail}`, true);
+                }
+            } catch (error) {
+                showToast('❌ Connection error. Make sure server is running: docker-compose up --build', true);
+            }
+        }
+
+        async function register() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!email || !password) {
+                showToast('Please enter email and password', true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showToast(`✅ Registered successfully! Username: ${data.username}`, false);
+                    // Auto-login after registration
+                    setTimeout(login, 1000);
+                } else {
+                    const error = await response.json();
+                    showToast(`❌ Registration failed: ${error.detail}`, true);
+                }
+            } catch (error) {
+                showToast('❌ Connection error. Make sure server is running: docker-compose up --build', true);
+            }
+        }
+
+        // --- Task 1: Short Polling ---
+        async function checkFeed() {
+            if (!authToken) {
+                showToast('❌ Please login first!', true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/feed/check-new', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const log = document.getElementById('pollLog');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Update UI
+                    lastCheckTime = new Date();
+                    document.getElementById('lastCheck').textContent = lastCheckTime.toLocaleTimeString();
+                    document.getElementById('hasNew').textContent = data.has_new_workouts ? 'YES!' : 'No';
+                    document.getElementById('hasNew').style.color = data.has_new_workouts ? '#28a745' : '#dc3545';
+                    document.getElementById('totalWorkouts').textContent = data.total_workouts;
+                    
+                    // Log
+                    const status = data.has_new_workouts ? '🆕 NEW WORKOUTS!' : 'No new workouts';
+                    const logEntry = `<div>[${lastCheckTime.toLocaleTimeString()}] ${status} (Total: ${data.total_workouts})</div>`;
+                    log.innerHTML = logEntry + log.innerHTML;
+                    
+                    // Keep log manageable
+                    if (log.children.length > 10) {
+                        log.removeChild(log.lastChild);
+                    }
+                    
+                    // Show toast if new workouts
+                    if (data.has_new_workouts) {
+                        showToast(`🎉 ${data.total_workouts} new workouts available!`, false);
+                    }
+                    
+                } else {
+                    const error = await response.json();
+                    const logEntry = `<div class="error">[${new Date().toLocaleTimeString()}] Polling failed: ${error.detail || 'Check token'}</div>`;
+                    log.innerHTML = logEntry + log.innerHTML;
+                }
+            } catch (error) {
+                const log = document.getElementById('pollLog');
+                const logEntry = `<div class="error">[${new Date().toLocaleTimeString()}] Polling error: ${error.message}</div>`;
+                log.innerHTML = logEntry + log.innerHTML;
+            }
+        }
+
+        function startPolling() {
+            if (!authToken) {
+                showToast('❌ Please login first!', true);
+                return;
+            }
+            
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+            
+            // Initial check
+            checkFeed();
+            
+            // Poll every 10 seconds as per requirements
+            pollingInterval = setInterval(checkFeed, 10000);
+            document.getElementById('pollStatus').textContent = 'Polling every 10s';
+            document.getElementById('pollStatus').style.color = '#28a745';
+            
+            showToast('🔍 Started polling every 10 seconds', false);
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+                document.getElementById('pollStatus').textContent = 'Stopped';
+                document.getElementById('pollStatus').style.color = '#dc3545';
+                showToast('⏹️ Stopped polling', false);
+            }
+        }
+
+        // --- Task 2: SSE ---
+        function connectSSE() {
+            if (!authToken) {
+                showToast('❌ Please login first!', true);
+                return;
+            }
+
+            if (sseConnection) {
+                disconnectSSE();
+            }
+
+            // Connect to SSE endpoint
+            const sseUrl = 'http://localhost:8000/api/feed/stream/global-hype';
+            sseConnection = new EventSource(sseUrl);
+            
+            document.getElementById('sseStatus').textContent = 'Connected';
+            document.getElementById('sseStatus').style.color = '#28a745';
+            
+            sseConnection.onmessage = (event) => {
+                try {
+                    // Parse the SSE data
+                    const data = JSON.parse(event.data);
+                    const log = document.getElementById('sseLog');
+                    const timestamp = new Date().toLocaleTimeString();
+                    
+                    if (data.type === 'workout') {
+                        // Format: "Athlete X just ran Ykm!"
+                        const logEntry = `<div>[${timestamp}] ${data.message}</div>`;
+                        log.innerHTML = logEntry + log.innerHTML;
+                        
+                        // Show toast notification
+                        showToast(`🏃‍♂️ ${data.message}`, false);
+                        
+                        // Keep log manageable
+                        if (log.children.length > 10) {
+                            log.removeChild(log.lastChild);
+                        }
+                    }
+                } catch (error) {
+                    // Handle heartbeat or other non-JSON messages
+                    if (event.data === ': heartbeat') {
+                        console.log('SSE heartbeat received');
+                    }
+                }
+            };
+
+            sseConnection.onerror = (error) => {
+                document.getElementById('sseStatus').textContent = 'Error - Reconnecting...';
+                document.getElementById('sseStatus').style.color = '#dc3545';
+                
+                const log = document.getElementById('sseLog');
+                const logEntry = `<div class="error">[${new Date().toLocaleTimeString()}] SSE Error, will reconnect automatically</div>`;
+                log.innerHTML = logEntry + log.innerHTML;
+            };
+
+            sseConnection.onopen = () => {
+                const log = document.getElementById('sseLog');
+                const logEntry = `<div class="success">[${new Date().toLocaleTimeString()}] ✅ Connected to real-time workout notifications</div>`;
+                log.innerHTML = logEntry + log.innerHTML;
+            };
+
+            showToast('📡 Connected to real-time workout notifications', false);
+        }
+
+        function disconnectSSE() {
+            if (sseConnection) {
+                sseConnection.close();
+                sseConnection = null;
+                document.getElementById('sseStatus').textContent = 'Disconnected';
+                document.getElementById('sseStatus').style.color = '#6c757d';
+                showToast('🔌 Disconnected from SSE', false);
+            }
+        }
+
+        // --- Create Workout (Triggers SSE) ---
+        async function createWorkout() {
+            if (!authToken) {
+                showToast('❌ Please login first!', true);
+                return;
+            }
+
+            const title = document.getElementById('workoutTitle').value;
+            const description = document.getElementById('workoutDesc').value;
+            const distance = parseFloat(document.getElementById('workoutDistance').value);
+
+            if (!title || !description || !distance || isNaN(distance)) {
+                showToast('❌ Please fill all fields with valid data', true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/api/workouts/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        title,
+                        description,
+                        distance_km: distance
+                    })
+                });
+
+                const log = document.getElementById('createLog');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log.innerHTML = `<div class="success">✅ Workout created: ${data.title} (${data.distance_km}km)</div>`;
+                    
+                    // Clear form after successful creation
+                    document.getElementById('workoutTitle').value = '';
+                    document.getElementById('workoutDesc').value = '';
+                    document.getElementById('workoutDistance').value = '';
+                    
+                    showToast(`✅ Created: ${title} - ${distance}km`, false);
+                    
+                } else {
+                    const error = await response.json();
+                    log.innerHTML = `<div class="error">❌ Failed to create workout: ${error.detail || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('createLog').innerHTML = 
+                    `<div class="error">❌ Connection error: ${error.message}. Make sure server is running.</div>`;
+            }
+        }
+
+        // --- Utility Functions ---
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            toast.style.background = isError ? '#f8d7da' : '#d4edda';
+            toast.style.borderColor = isError ? '#f5c6cb' : '#c3e6cb';
+            toast.style.color = isError ? '#721c24' : '#155724';
+            
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 5000);
+        }
+        let ws = null;
+
+function connectWebSocket() {
+    const inputToken = document.getElementById("wsTokenInput").value.trim();
+    if (inputToken) {
+        authToken = inputToken;
+    }
+
+    if (!authToken) {
+        showToast("Please login first or paste a token", true);
+        return;
+    }
+
+    document.getElementById("wsTokenInput").value = authToken;
+
+    const wsUrl = `ws://localhost:8000/api/feed/ws/feed?token=${authToken}`;
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        showToast("WebSocket connected");
+
+        try {
+            const parts = authToken.split(".");
+            const payload = JSON.parse(atob(parts[1]));
+            const expiry = new Date(payload.exp * 1000).toLocaleTimeString();
+            const isExpired = Date.now() > payload.exp * 1000;
+
+            const box = document.getElementById("tokenVerifyBox");
+            const content = document.getElementById("tokenVerifyContent");
+            box.style.display = "block";
+            box.style.borderLeft = isExpired ? "4px solid red" : "4px solid #28a745";
+            content.innerHTML = `
+                <div style="color:${isExpired ? 'red' : '#28a745'}">
+                    ${isExpired ? '❌ Token EXPIRED' : '✅ Token Valid'}
+                </div>
+                <div>👤 User (sub): <strong>${payload.sub}</strong></div>
+                <div>⏰ Expires: <strong>${expiry}</strong></div>
+                <div>🔑 Algorithm: HS256</div>
+            `;
+
+            const feed = document.getElementById("wsFeed");
+            feed.innerHTML = `<div style="color:#28a745; font-family:monospace;">Connected to /ws/feed</div>` + feed.innerHTML;
+        } catch(e) {
+            document.getElementById("tokenVerifyContent").innerHTML = `<div style="color:red">❌ Could not decode token</div>`;
+        }
+    };
+
+    ws.onerror = () => {
+        const box = document.getElementById("tokenVerifyBox");
+        box.style.display = "block";
+        box.style.borderLeft = "4px solid red";
+        document.getElementById("tokenVerifyContent").innerHTML = `<div style="color:red">❌ Token verification failed - Invalid or expired token</div>`;
+        showToast("WebSocket error", true);
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "clap") {
+            const log = document.getElementById("clapLog");
+            log.innerHTML = `<div>[${new Date().toLocaleTimeString()}] 👏 You got a clap from user ${data.from_user_id}!</div>` + log.innerHTML;
+            showToast(`👏 Someone clapped for you!`, false);
+        }
+
+        if (data.type === "workout") {
+            const container = document.getElementById("wsFeed");
+
+            const div = document.createElement("div");
+            div.className = "workout-item";
+            div.innerHTML = `
+                🏃 <strong>${data.owner}</strong> posted:<br>
+                ${data.title} - ${data.distance_km}km
+            `;
+
+            container.prepend(div);
+        }
+    };
+
+    ws.onclose = () => {
+        document.getElementById("wsStatus").textContent = "Disconnected";
+        document.getElementById("wsStatus").style.color = "#dc3545";
+    };
+
+    
+}
+
+function disconnectWebSocket() {
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+}
+function sendClap() {
+    const targetId = parseInt(document.getElementById("clapTargetId").value);
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        showToast("Connect to WebSocket first!", true);
+        return;
+    }
+    if (!targetId) {
+        showToast("Enter a target user ID", true);
+        return;
+    }
+    ws.send(JSON.stringify({ type: "clap", target_user_id: targetId }));
+    const log = document.getElementById("clapLog");
+    log.innerHTML = `<div>[${new Date().toLocaleTimeString()}] 👏 Clap sent to user ${targetId}</div>` + log.innerHTML;
+}
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+            if (sseConnection) {
+                sseConnection.close();
+            }
+        });
+
+        // Initialize with test credentials
+        window.addEventListener('DOMContentLoaded', () => {
+            // Pre-fill with test data
+            document.getElementById('loginEmail').value = 'test@example.com';
+            document.getElementById('loginPassword').value = 'password';
+            
+            // Auto-login for convenience
+            setTimeout(() => {
+                if (!authToken) {
+                    login();
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
