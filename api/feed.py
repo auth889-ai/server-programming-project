@@ -1,19 +1,21 @@
-# api/feed.py - UPDATED with SSE endpoint
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+# api/feed.py
+from fastapi import (
+    APIRouter,
+    Depends,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 from datetime import datetime, timezone
-from typing import Optional, Dict
-
-from models import Workout, engine
-from core.auth import get_current_user
-from core.realtime import notifier, event_generator  # ADD THESE IMPORTS
-from api.schemas import FeedCheckResponse
-from fastapi import WebSocket, WebSocketDisconnect
+from typing import Dict
 from jose import jwt, JWTError
-from core.auth import SECRET_KEY, ALGORITHM
-from core.realtime import manager
-from models import User
+
+from models import User, Workout, engine
+from core.auth import get_current_user, SECRET_KEY, ALGORITHM
+from core.realtime import notifier, event_generator, manager
+from api.schemas import FeedCheckResponse
 
 router = APIRouter(tags=["feed"])
 
@@ -87,18 +89,14 @@ async def websocket_feed(websocket: WebSocket, token: str):
     WebSocket endpoint for personalized feed
     """
 
-    # 1️⃣ Verify JWT
+    # 1. Verify JWT
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        print(f"✅ Token decoded successfully: {payload}")
         email = payload.get("sub")
-        print(f"✅ User email from token: {email}")
         if email is None:
-            print("❌ No email found in token")
             await websocket.close(code=1008)
             return
-    except JWTError as e:
-        print(f"❌ Token verification failed: {e}")
+    except JWTError:
         await websocket.close(code=1008)
         return
 
