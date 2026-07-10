@@ -1,6 +1,10 @@
 # Use an official lightweight Python image
 FROM python:3.10-slim
 
+# Don't write .pyc files and don't buffer stdout/stderr (better Docker logs)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 # Set the working directory inside the container
 WORKDIR /app
 
