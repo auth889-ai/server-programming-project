@@ -25,6 +25,19 @@ def create_follow(
     if follow.following_id == current_user.id:
         raise HTTPException(400, "You cannot follow yourself")
 
+    target_user = session.get(User, follow.following_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Target user not found")
+
+    existing_follow = session.exec(
+        select(Follow).where(
+            Follow.follower_id == current_user.id,
+            Follow.following_id == follow.following_id
+        )
+    ).first()
+    if existing_follow:
+        raise HTTPException(status_code=400, detail="Already following this user")
+
     new_follow = Follow(
         follower_id=current_user.id,
         following_id=follow.following_id
