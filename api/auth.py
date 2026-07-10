@@ -45,7 +45,6 @@ def register_user(new_user: UserCreate, session: Session = Depends(get_session))
     
     hashed = hash_password(new_user.password)
     username = new_user.email.split("@")[0]
-    hashed = hash_password(new_user.password)
     user = User(
         email=new_user.email, 
         username=username, 
