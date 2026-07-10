@@ -24,6 +24,12 @@ class Token(BaseModel):
 # ---------------------------
 # WORKOUTS
 # ---------------------------
+class WorkoutCreate(BaseModel):
+    title: str
+    description: str
+    distance_km: float
+
+
 class WorkoutPublic(BaseModel):
     id: Optional[int] = None
     title: str

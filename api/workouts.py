@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 
 from models import Workout, Follow, User, engine
 from core.auth import get_current_user
-from api.schemas import WorkoutPublic
+from api.schemas import WorkoutCreate, WorkoutPublic
 from core.realtime import manager
 
 router = APIRouter(tags=["workouts"])
@@ -40,7 +40,7 @@ async def broadcast_workout(workout: Workout, session: Session):
 # Create workout
 @router.post("/", response_model=WorkoutPublic, status_code=201)
 async def create_workout(
-    workout: WorkoutPublic,
+    workout: WorkoutCreate,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -83,7 +83,7 @@ def get_workout(workout_id: int, session: Session = Depends(get_session)):
 @router.put("/{workout_id}", response_model=WorkoutPublic)
 def update_workout(
     workout_id: int,
-    workout_data: WorkoutPublic,
+    workout_data: WorkoutCreate,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
