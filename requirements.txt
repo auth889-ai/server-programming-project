@@ -1,10 +1,9 @@
-fastapi
 fastapi[standard]
 sqlmodel
 psycopg2-binary
 argon2-cffi
 python-jose[cryptography]
-fastapi-cors
+python-dotenv
 fastapi-cors
 httpx
 starlette
