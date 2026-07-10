@@ -1,12 +1,14 @@
 # core/rate_limiter.py
 
+import os
 import redis
 from fastapi import HTTPException
 
-# Redis connection
+# Redis connection (defaults match docker-compose's exposed port on the host;
+# set REDIS_HOST=redis and REDIS_PORT=6379 when running inside the compose network)
 redis_client = redis.Redis(
-    host="127.0.0.1",
-    port=6380,
+    host=os.environ.get("REDIS_HOST", "127.0.0.1"),
+    port=int(os.environ.get("REDIS_PORT", "6380")),
     decode_responses=True
 )
 
