@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from sqlmodel import Session, select
 
 from models import Workout, Follow, User, engine
@@ -61,10 +61,19 @@ async def create_workout(
     return new_workout
 
 
-# List workouts
+# List workouts (newest first, paginated)
 @router.get("/", response_model=List[WorkoutPublic])
-def list_workouts(session: Session = Depends(get_session)):
-    return session.exec(select(Workout)).all()
+def list_workouts(
+    session: Session = Depends(get_session),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    return session.exec(
+        select(Workout)
+        .order_by(Workout.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
 
 
 # Get single workout
