@@ -100,7 +100,7 @@ async def websocket_feed(websocket: WebSocket, token: str):
         await websocket.close(code=1008)
         return
 
-    # 2️⃣ Get user from DB
+    # 2. Get user from DB
     with Session(engine) as session:
         user = session.exec(select(User).where(User.email == email)).first()
         if not user:
@@ -109,7 +109,7 @@ async def websocket_feed(websocket: WebSocket, token: str):
 
         user_id = user.id
 
-    # 3️⃣ Connect user
+    # 3. Connect user
     await manager.connect(user_id, websocket)
 
     try:
