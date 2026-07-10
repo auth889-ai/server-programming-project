@@ -25,7 +25,12 @@ async def lifespan(app: FastAPI):
     print("App is shutting down...")
 
 # Create the FastAPI app with lifespan
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Workout Social API",
+    description="SWE 4538 group 14 - social workout tracker with auth, follows and a realtime feed",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 # Add all middleware (CORS + ResponseTime)
 add_all_middleware(app)
