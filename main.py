@@ -1,4 +1,5 @@
 # main.py
+import logging
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
@@ -15,14 +16,16 @@ from api.feed import router as feed_router
 # Import middleware
 from core.middleware import add_all_middleware
 
+logger = logging.getLogger(__name__)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("App is starting up...")
+    logger.info("App is starting up...")
     # This is the code that runs on startup
     create_db_and_tables()
-    print("Database tables created.")
+    logger.info("Database tables created.")
     yield  # This yield separates startup code from shutdown code
-    print("App is shutting down...")
+    logger.info("App is shutting down...")
 
 # Create the FastAPI app with lifespan
 app = FastAPI(
