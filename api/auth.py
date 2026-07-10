@@ -7,11 +7,12 @@ import os
 from api.schemas import UserCreate, UserPublic, Token
 from models import User, engine
 from core.auth import (
-    hash_password, 
-    verify_password, 
-    create_access_token, 
+    hash_password,
+    verify_password,
+    create_access_token,
     validate_google_token,
-    get_current_user
+    get_current_user,
+    GOOGLE_REDIRECT_URI,
 )
 
 router = APIRouter(tags=["auth"])
@@ -29,8 +30,7 @@ def google_login():
         "https://accounts.google.com/o/oauth2/v2/auth"
         "?response_type=code"
         f"&client_id={os.getenv('GOOGLE_CLIENT_ID')}"
-        # FIXED: Match your Google Console redirect URI
-        "&redirect_uri=http://localhost:8000/api/auth/google/callback"
+        f"&redirect_uri={GOOGLE_REDIRECT_URI}"
         "&scope=openid%20email%20profile"
         "&access_type=offline"
         "&prompt=consent"

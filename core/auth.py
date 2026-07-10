@@ -24,8 +24,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60")
 # Google OAuth config
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-# MUST MATCH Google Console AND api/auth.py
-GOOGLE_REDIRECT_URI = "http://localhost:8000/api/auth/google/callback"
+# MUST MATCH the redirect URI registered in Google Console
+GOOGLE_REDIRECT_URI = os.getenv(
+    "GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"
+)
 
 password_hasher = PasswordHasher()
 security = HTTPBearer()
@@ -70,7 +72,7 @@ async def validate_google_token(code: str) -> str:
                 "code": code,
                 "client_id": GOOGLE_CLIENT_ID,
                 "client_secret": GOOGLE_CLIENT_SECRET,
-                "redirect_uri": "http://localhost:8000/api/auth/google/callback",
+                "redirect_uri": GOOGLE_REDIRECT_URI,
                 "grant_type": "authorization_code",
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
