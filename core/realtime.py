@@ -17,7 +17,7 @@ class GlobalWorkoutNotifier:
 
     def unsubscribe(self, queue: asyncio.Queue):
         """Removes the queue when the visitor leaves."""
-        self.listeners.remove(queue)
+        self.listeners.discard(queue)
 
     async def notify_new_workout(self, athlete_name: str, distance: float):
         """Broadcasts a workout notification to every active listener."""
@@ -89,7 +89,8 @@ class ConnectionManager:
 
     def disconnect(self, user_id: int, websocket: WebSocket):
         if user_id in self.active_connections:
-            self.active_connections[user_id].remove(websocket)
+            if websocket in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(websocket)
 
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
